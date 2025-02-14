@@ -5,32 +5,32 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/vaim25ye/avito/internal/cache"
 	"github.com/vaim25ye/avito/internal/repository"
 )
 
 type Handler struct {
-	repo *repository.Repository
+	repo  repository.Repo // <-- интерфейс!
+	cache *cache.Cache
 }
 
-func NewHandler(r *repository.Repository) *Handler {
-	return &Handler{repo: r}
+func NewHandler(r repository.Repo, c *cache.Cache) *Handler {
+	return &Handler{repo: r, cache: c}
 }
 
-// --------------------
 // POST /users
-// JSON: { "name":"Вася", "password":"secret", "balance":1000 }
-// --------------------
+// JSON: { "name":"Vasya", "password":"secret", "balance":1000 }
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	type createUserReq struct {
+	type request struct {
 		Name     string `json:"name"`
 		Password string `json:"password"`
 		Balance  int    `json:"balance"`
 	}
-	var req createUserReq
+	var req request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -41,20 +41,17 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(user)
 }
 
-// --------------------
 // GET /get_user?id=1
-// --------------------
+// Возвращает данные из кэша (UserInfo)
 func (h *Handler) GetUserByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
 		http.Error(w, "missing id", http.StatusBadRequest)
@@ -66,59 +63,50 @@ func (h *Handler) GetUserByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.repo.GetUserByID(r.Context(), userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+	info, ok := h.cache.GetUserInfoByID(userID)
+	if !ok {
+		http.Error(w, "user not found in cache", http.StatusNotFound)
 		return
 	}
-
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(user)
+	_ = json.NewEncoder(w).Encode(info)
 }
 
-// --------------------
 // POST /transfer
 // body: { "from_user":1, "to_user":2, "amount":300 }
-// --------------------
 func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	type transferReq struct {
+	type reqBody struct {
 		FromUser int `json:"from_user"`
 		ToUser   int `json:"to_user"`
 		Amount   int `json:"amount"`
 	}
-	var req transferReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var body reqBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	err := h.repo.Transfer(r.Context(), req.FromUser, req.ToUser, req.Amount)
+	err := h.repo.Transfer(r.Context(), body.FromUser, body.ToUser, body.Amount)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status": "ok",
-	})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// --------------------
 // POST /purchase
 // body: { "user_id":1, "merch_id":2, "amount":3 }
-// --------------------
 func (h *Handler) PurchaseMerch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	type purchaseReq struct {
 		UserID  int `json:"user_id"`
 		MerchID int `json:"merch_id"`
@@ -137,7 +125,5 @@ func (h *Handler) PurchaseMerch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status": "purchase success",
-	})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "purchase success"})
 }

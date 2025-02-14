@@ -26,3 +26,11 @@ type Operation struct {
 	ToUser      int `db:"toUser"       json:"toUser"`
 	Amount      int `db:"amount"       json:"amount"`
 }
+
+// UserInfo - данные, которые складываются в кэш для быстрого доступа:
+// сам User + массив Operations + массив Purchases (и т.д.)
+type UserInfo struct {
+	User       User        `json:"user"`
+	Operations []Operation `json:"operations"`
+	Purchases  []Purchase  `json:"purchases"`
+}

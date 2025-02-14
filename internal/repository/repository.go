@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	_ "github.com/lib/pq"
 	"github.com/vaim25ye/avito/internal/model"
 )
 
@@ -19,7 +19,6 @@ func NewRepository(dsn string) (*Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Настройки пула соединений
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 
@@ -51,8 +50,7 @@ func (r *Repository) CreateUser(ctx context.Context, name, password string, bala
 // GetUserByID - получение пользователя по ID
 func (r *Repository) GetUserByID(ctx context.Context, userID int) (model.User, error) {
 	query := `SELECT user_id, name, password, balance
-              FROM "user"
-              WHERE user_id = $1`
+              FROM "user" WHERE user_id = $1`
 	var u model.User
 	err := r.db.QueryRowContext(ctx, query, userID).
 		Scan(&u.UserID, &u.Name, &u.Password, &u.Balance)
@@ -65,7 +63,7 @@ func (r *Repository) GetUserByID(ctx context.Context, userID int) (model.User, e
 	return u, nil
 }
 
-// Transfer - перевод денег между пользователями (с транзакцией)
+// Transfer - перевод денег между пользователями (транзакция)
 func (r *Repository) Transfer(ctx context.Context, fromUserID, toUserID, amount int) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -82,7 +80,7 @@ func (r *Repository) Transfer(ctx context.Context, fromUserID, toUserID, amount 
 		}
 	}()
 
-	// 1. Проверяем баланс fromUser
+	// Проверить баланс
 	var balance int
 	sel := `SELECT balance FROM "user" WHERE user_id=$1 FOR UPDATE`
 	if err = tx.QueryRowContext(ctx, sel, fromUserID).Scan(&balance); err != nil {
@@ -92,21 +90,21 @@ func (r *Repository) Transfer(ctx context.Context, fromUserID, toUserID, amount 
 		return fmt.Errorf("not enough funds: have %d, need %d", balance, amount)
 	}
 
-	// 2. Списываем
+	// Списать
 	updFrom := `UPDATE "user" SET balance=balance-$1 WHERE user_id=$2`
 	_, err = tx.ExecContext(ctx, updFrom, amount, fromUserID)
 	if err != nil {
 		return err
 	}
 
-	// 3. Зачисляем
+	// Зачислить
 	updTo := `UPDATE "user" SET balance=balance+$1 WHERE user_id=$2`
 	_, err = tx.ExecContext(ctx, updTo, amount, toUserID)
 	if err != nil {
 		return err
 	}
 
-	// 4. Пишем в operation
+	// Запись в operation
 	insOp := `INSERT INTO operation(fromUser, toUser, amount) VALUES($1, $2, $3)`
 	_, err = tx.ExecContext(ctx, insOp, fromUserID, toUserID, amount)
 	if err != nil {
@@ -116,7 +114,7 @@ func (r *Repository) Transfer(ctx context.Context, fromUserID, toUserID, amount 
 	return nil
 }
 
-// PurchaseMerch - покупка мерча (списываем баланс + создаём запись в purchase)
+// PurchaseMerch - покупка мерча (транзакция)
 func (r *Repository) PurchaseMerch(ctx context.Context, userID, merchID, count int) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -133,7 +131,7 @@ func (r *Repository) PurchaseMerch(ctx context.Context, userID, merchID, count i
 		}
 	}()
 
-	// 1. Получить price мерча
+	// Узнать price
 	var price int
 	qPrice := `SELECT price FROM merch WHERE merch_id=$1`
 	if err = tx.QueryRowContext(ctx, qPrice, merchID).Scan(&price); err != nil {
@@ -141,7 +139,7 @@ func (r *Repository) PurchaseMerch(ctx context.Context, userID, merchID, count i
 	}
 	total := price * count
 
-	// 2. Проверить баланс
+	// Проверить баланс
 	var balance int
 	qBalance := `SELECT balance FROM "user" WHERE user_id=$1 FOR UPDATE`
 	if err = tx.QueryRowContext(ctx, qBalance, userID).Scan(&balance); err != nil {
@@ -151,14 +149,14 @@ func (r *Repository) PurchaseMerch(ctx context.Context, userID, merchID, count i
 		return fmt.Errorf("not enough funds: have %d, need %d", balance, total)
 	}
 
-	// 3. Списать
+	// Списать
 	upd := `UPDATE "user" SET balance=balance-$1 WHERE user_id=$2`
 	_, err = tx.ExecContext(ctx, upd, total, userID)
 	if err != nil {
 		return err
 	}
 
-	// 4. Добавить запись в purchase
+	// Вставить запись в purchase
 	ins := `INSERT INTO purchase(user_id, merch_id, amount) VALUES($1, $2, $3)`
 	_, err = tx.ExecContext(ctx, ins, userID, merchID, count)
 	if err != nil {
@@ -166,4 +164,118 @@ func (r *Repository) PurchaseMerch(ctx context.Context, userID, merchID, count i
 	}
 
 	return nil
+}
+
+// ---------------------------------------------------------------------
+// НИЖЕ: метод для получения ВСЕХ данных (для кэша)
+// ---------------------------------------------------------------------
+func (r *Repository) LoadAllUserData(ctx context.Context) ([]model.UserInfo, error) {
+	users, err := r.loadAllUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ops, err := r.loadAllOperations(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	pur, err := r.loadAllPurchases(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Собираем map[userID] -> UserInfo
+	m := make(map[int]model.UserInfo)
+	for _, u := range users {
+		m[u.UserID] = model.UserInfo{
+			User:       u,
+			Operations: []model.Operation{},
+			Purchases:  []model.Purchase{},
+		}
+	}
+
+	// Привязываем операции
+	for _, o := range ops {
+		// fromUser
+		if ui, ok := m[o.FromUser]; ok {
+			ui.Operations = append(ui.Operations, o)
+			m[o.FromUser] = ui
+		}
+		// toUser
+		if ui, ok := m[o.ToUser]; ok {
+			ui.Operations = append(ui.Operations, o)
+			m[o.ToUser] = ui
+		}
+	}
+
+	// Привязываем покупки
+	for _, p := range pur {
+		if ui, ok := m[p.UserID]; ok {
+			ui.Purchases = append(ui.Purchases, p)
+			m[p.UserID] = ui
+		}
+	}
+
+	// Собираем результат
+	var result []model.UserInfo
+	for _, info := range m {
+		result = append(result, info)
+	}
+
+	return result, nil
+}
+
+func (r *Repository) loadAllUsers(ctx context.Context) ([]model.User, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT user_id, name, password, balance FROM "user"`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var res []model.User
+	for rows.Next() {
+		var u model.User
+		if err = rows.Scan(&u.UserID, &u.Name, &u.Password, &u.Balance); err != nil {
+			return nil, err
+		}
+		res = append(res, u)
+	}
+	return res, rows.Err()
+}
+
+func (r *Repository) loadAllOperations(ctx context.Context) ([]model.Operation, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT operation_id, fromUser, toUser, amount FROM operation`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ops []model.Operation
+	for rows.Next() {
+		var o model.Operation
+		if err = rows.Scan(&o.OperationID, &o.FromUser, &o.ToUser, &o.Amount); err != nil {
+			return nil, err
+		}
+		ops = append(ops, o)
+	}
+	return ops, rows.Err()
+}
+
+func (r *Repository) loadAllPurchases(ctx context.Context) ([]model.Purchase, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT purchase_id, user_id, merch_id, amount FROM purchase`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pur []model.Purchase
+	for rows.Next() {
+		var p model.Purchase
+		if err = rows.Scan(&p.PurchaseID, &p.UserID, &p.MerchID, &p.Amount); err != nil {
+			return nil, err
+		}
+		pur = append(pur, p)
+	}
+	return pur, rows.Err()
 }
