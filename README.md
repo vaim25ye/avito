@@ -34,7 +34,9 @@
     ```bash
     docker compose ps
 Вы должны увидеть два контейнера: например, avito_db и avito_app.
+
 4.  **Тестирование**
+
     4.1 Создание пользователя (POST /users): 
     $headers = @{ "Content-Type" = "application/json" }
     $body = '{"name":"Vasya","password":"secret","balance":1000}'
