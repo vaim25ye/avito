@@ -18,8 +18,6 @@ func NewHandler(r repository.Repo, c *cache.Cache) *Handler {
 	return &Handler{repo: r, cache: c}
 }
 
-// POST /users
-// JSON: { "name":"Vasya", "password":"secret", "balance":1000 }
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -45,8 +43,6 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(user)
 }
 
-// GET /get_user?id=1
-// Возвращает данные из кэша (UserInfo)
 func (h *Handler) GetUserByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -72,8 +68,6 @@ func (h *Handler) GetUserByID(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(info)
 }
 
-// POST /transfer
-// body: { "from_user":1, "to_user":2, "amount":300 }
 func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -100,8 +94,6 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// POST /purchase
-// body: { "user_id":1, "merch_id":2, "amount":3 }
 func (h *Handler) PurchaseMerch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

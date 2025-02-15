@@ -28,3 +28,23 @@ CREATE TABLE IF NOT EXISTS operation (
                                          FOREIGN KEY (fromUser) REFERENCES "user" (user_id),
     FOREIGN KEY (toUser)   REFERENCES "user" (user_id)
     );
+
+INSERT INTO "user" (name, password, balance) VALUES
+                                                 ('TestUser1', 'pass1', 1000),
+                                                 ('TestUser2', 'pass2', 2000),
+                                                 ('TestUser3', 'pass3', 3000);
+
+INSERT INTO merch (type, price) VALUES
+                                    ('t-shirt', 80),
+                                    ('cup', 20),
+                                    ('book', 150),
+                                    ('pen', 5),
+                                    ('powerbank', 200),
+                                    ('hoody', 300),
+                                    ('umbrella', 200),
+                                    ('socks', 10),
+                                    ('wallet', 50),
+                                    ('pink-hoody', 500);
+
+INSERT INTO purchase (user_id, merch_id, amount) VALUES (1, 1, 2);
+INSERT INTO operation (fromUser, toUser, amount) VALUES (2, 1, 200);

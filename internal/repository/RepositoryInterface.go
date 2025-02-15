@@ -12,5 +12,4 @@ type Repo interface {
 	Transfer(ctx context.Context, fromUser, toUser, amount int) error
 	PurchaseMerch(ctx context.Context, userID, merchID, count int) error
 	LoadAllUserData(ctx context.Context) ([]model.UserInfo, error)
-	// ... если нужны ещё методы
 }

@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:15
+    container_name: avito_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: avito
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avito_app
+    ports:
+      - "8080:8080"
+    environment:
+      DB_DSN: "postgres://postgres:password@db:5432/avito?sslmode=disable"
+    depends_on:
+      - db

@@ -29,8 +29,6 @@ func (c *Cache) GetUserInfoByID(userID int) (model.UserInfo, bool) {
 	return info, ok
 }
 
-// StartCacheUpdater — запускает горутину, которая каждые interval сек
-// вызывает updateCache и обновляет внутренний store.
 func StartCacheUpdater(ctx context.Context, repo *repository.Repository, c *Cache, interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -54,7 +52,6 @@ func StartCacheUpdater(ctx context.Context, repo *repository.Repository, c *Cach
 	}()
 }
 
-// updateCache — грузит всё из БД, записывает в c.store.
 func updateCache(ctx context.Context, repo *repository.Repository, c *Cache) error {
 	userInfos, err := repo.LoadAllUserData(ctx)
 	if err != nil {

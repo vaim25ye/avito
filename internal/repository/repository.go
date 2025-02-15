@@ -29,7 +29,6 @@ func NewRepository(dsn string) (*Repository, error) {
 	return &Repository{db: db}, nil
 }
 
-// CreateUser - создание нового пользователя
 func (r *Repository) CreateUser(ctx context.Context, name, password string, balance int) (model.User, error) {
 	query := `INSERT INTO "user"(name, password, balance)
               VALUES ($1, $2, $3)
@@ -47,7 +46,6 @@ func (r *Repository) CreateUser(ctx context.Context, name, password string, bala
 	}, nil
 }
 
-// GetUserByID - получение пользователя по ID
 func (r *Repository) GetUserByID(ctx context.Context, userID int) (model.User, error) {
 	query := `SELECT user_id, name, password, balance
               FROM "user" WHERE user_id = $1`
@@ -63,7 +61,6 @@ func (r *Repository) GetUserByID(ctx context.Context, userID int) (model.User, e
 	return u, nil
 }
 
-// Transfer - перевод денег между пользователями (транзакция)
 func (r *Repository) Transfer(ctx context.Context, fromUserID, toUserID, amount int) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -166,9 +163,6 @@ func (r *Repository) PurchaseMerch(ctx context.Context, userID, merchID, count i
 	return nil
 }
 
-// ---------------------------------------------------------------------
-// НИЖЕ: метод для получения ВСЕХ данных (для кэша)
-// ---------------------------------------------------------------------
 func (r *Repository) LoadAllUserData(ctx context.Context) ([]model.UserInfo, error) {
 	users, err := r.loadAllUsers(ctx)
 	if err != nil {
@@ -195,14 +189,12 @@ func (r *Repository) LoadAllUserData(ctx context.Context) ([]model.UserInfo, err
 		}
 	}
 
-	// Привязываем операции
 	for _, o := range ops {
 		// fromUser
 		if ui, ok := m[o.FromUser]; ok {
 			ui.Operations = append(ui.Operations, o)
 			m[o.FromUser] = ui
 		}
-		// toUser
 		if ui, ok := m[o.ToUser]; ok {
 			ui.Operations = append(ui.Operations, o)
 			m[o.ToUser] = ui
